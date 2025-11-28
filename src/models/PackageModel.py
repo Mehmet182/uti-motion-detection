@@ -105,4 +105,4 @@ class PackageConfigs(Configs):
 class PackageModel(Package):
     configs: PackageConfigs
     type: Literal["component"] = "component"
-    name: Literal["Motion"] = "Motion"
+    name: Literal["MotionDetection"] = "MotionDetection"

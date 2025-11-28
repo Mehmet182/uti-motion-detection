@@ -1,11 +1,11 @@
 
 from sdks.novavision.src.helper.package import PackageHelper
-from components.Package.src.models.PackageModel import PackageModel, PackageConfigs, ConfigExecutor, MotionOutputs, MotionResponse, MotionExecutor, OutputImage
+from components.Package.src.models.PackageModel import PackageModel, PackageConfigs, ConfigExecutor, MotionOutputs, MotionResponse, MotionExecutor, OutputDetections
 
 
 def build_response(context):
-    OotputDetections = OutputDetections(value=context.motion_detections)
-    Outputs = MotionOutputs(OotputDetections=OotputDetections)
+    outputDetections = OutputDetections(value=context.motion_detections)
+    Outputs = MotionOutputs(OotputDetections=outputDetections)
     motionResponse = MotionResponse(outputs=Outputs)
     motionExecutor = MotionExecutor(value=motionResponse)
     executor = ConfigExecutor(value=motionExecutor)
