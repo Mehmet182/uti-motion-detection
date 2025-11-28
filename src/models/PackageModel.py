@@ -74,7 +74,7 @@ class MotionResponse(Response):
 
 
 class MotionExecutor(Config):
-    name: Literal["Motion"] = "Motion"
+    name: Literal["MotionExecutor"] = "MotionExecutor"
     value: Union[MotionRequest, MotionResponse]
     type: Literal["object"] = "object"
     field: Literal["option"] = "option"
