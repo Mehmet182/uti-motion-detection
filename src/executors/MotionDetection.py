@@ -11,6 +11,10 @@ class MotionDetector(Component):
     def __init__(self, request, bootstrap):
         super().__init__(request, bootstrap)
         self.request.model = PackageModel(**(self.request.data))
+        print("Initialized Motion Detection Executor")
+        print(f"self.request.model: {self.request.model}")
+
+
 
         self.detections= self.request.get_param("inputDetections")
         print(f"Motion Detection Input Detections: {self.detections}")
