@@ -1,9 +1,9 @@
 import sys
 import math
-import json
-# Orijinal platform bağımlılıkları
 from sdks.novavision.src.base.component import Component
 from sdks.novavision.src.helper.executor import Executor
+from components.Package.src.utils.response import build_response
+from components.Package.src.models.PackageModel import PackageModel
 
 
 # Sizin custom import'larınız: build_response fonksiyonunu burada varsayıyoruz.
@@ -13,17 +13,21 @@ from sdks.novavision.src.helper.executor import Executor
 
 # Varsayım: build_response fonksiyonunuzun tanımı (Bu kısım normalde başka bir dosyada olur.)
 # Eğer OnDetection içinde değilse, bu kısım kaldırılıp import edilmelidir.
-class MotionDetector(Capsule):
+class MotionDetector(Component):
 
-    def __init__(self, request: Dict[str, Any], bootstrap: Dict[str, Any]):
+    def __init__(self, request, bootstrap):
         super().__init__(request, bootstrap)
+        self.request.model = PackageModel(**(self.request.data))
 
         self.detections= self.request.get_param("inputDetections")
+        print(f"Motion Detection Input Detections: {self.detections}")
         self.motion_threshold = self.request.get_param("ConfigMotionThreshold")
+        print(f"Motion Detection Threshold: {self.motion_threshold}")
         self.stationary_frames_limit = self.request.get_param("ConfigStationaryFrames")
+        print(f"Motion Detection Stationary Frames Limit: {self.stationary_frames_limit}")
 
-        self.previous_centers: Dict[int, tuple] = self.bootstrap.get("previous_centers", {})
-        self.stationary_counters: Dict[int, int] = self.bootstrap.get("stationary_counters", {})
+        self.previous_centers = self.bootstrap.get("previous_centers")
+        self.stationary_counters= self.bootstrap.get("stationary_counters")
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
@@ -106,7 +110,7 @@ class MotionDetector(Capsule):
 
         return processed_detections
 
-    def run(self) -> Dict[str, Any]:
+    def run(self):
         # 1. Algılamaları işleyip hareket durumunu ekle ve durumu güncelle
         processed_detections = self.process_detections(self.detections)
 
@@ -114,7 +118,7 @@ class MotionDetector(Capsule):
         self.motion_detections = processed_detections
 
         # 3. Özel build_response_detect fonksiyonunu kullanarak paket modelini oluştur
-        packageModel = build_response_detect(context=self)
+        packageModel = build_response(context=self)
 
         # 4. Güncellenmiş bootstrap verisini çıktı paketine ekle
         packageModel["bootstrap"] = self.bootstrap
