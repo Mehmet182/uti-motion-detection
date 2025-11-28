@@ -1,5 +1,10 @@
 import sys
+import os
 import math
+
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../'))
+
 from sdks.novavision.src.base.component import Component
 from sdks.novavision.src.helper.executor import Executor
 from components.MotionDetection.src.utils.response import build_response
