@@ -2,8 +2,8 @@ import sys
 import math
 from sdks.novavision.src.base.component import Component
 from sdks.novavision.src.helper.executor import Executor
-from components.Package.src.utils.response import build_response
-from components.Package.src.models.PackageModel import PackageModel
+from components.MotionDetection.src.utils.response import build_response
+from components.MotionDetection.src.models.PackageModel import PackageModel
 
 
 class MotionDetector(Component):

@@ -1,6 +1,6 @@
 
 from sdks.novavision.src.helper.package import PackageHelper
-from components.Package.src.models.PackageModel import PackageModel, PackageConfigs, ConfigExecutor, MotionOutputs, MotionResponse, MotionExecutor, OutputDetections
+from components.MotionDetection.src.models.PackageModel import PackageModel, PackageConfigs, ConfigExecutor, MotionOutputs, MotionResponse, MotionExecutor, OutputDetections
 
 
 def build_response(context):
