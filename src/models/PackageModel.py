@@ -13,7 +13,11 @@ class InputDetections(Input):
         title = "Detections"
 
 class Detection(Detection):
-    motionStatus: Optional[str] = None
+    imgUID: Optional[str] = None
+    trackerID: Optional[Union[List, int]] = None
+    UUID: Optional[str] = ""
+    source: Optional[str] = ""
+    motionStatus: Optional[str] = None # Sizin eklediğiniz alan
 
 class OutputDetections(Output):
     name: Literal["outputDetections"] = "outputDetections"
@@ -84,7 +88,6 @@ class MotionExecutor(Config):
         }
 
 
-
 class ConfigExecutor(Config):
     name: Literal["ConfigExecutor"] = "ConfigExecutor"
     value: Union[MotionExecutor]
@@ -96,7 +99,6 @@ class ConfigExecutor(Config):
         json_schema_extra = {
             "target": "value"
         }
-
 
 class PackageConfigs(Configs):
     executor: ConfigExecutor
