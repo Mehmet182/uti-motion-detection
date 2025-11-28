@@ -26,7 +26,7 @@ class OutputDetections(Output):
 
 class ConfigMotionThreshold(Config):
     name: Literal["configMotionThreshold"] = "configMotionThreshold"
-    value: int = Field(20, ge=0, le=100 , default=20)
+    value: int = Field(ge=0, le=100 , default=20)
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
 
@@ -35,7 +35,7 @@ class ConfigMotionThreshold(Config):
 
 class ConfigStationaryFrames(Config):
     name: Literal["configStationaryFrames"] = "configStationaryFrames"
-    value: int = Field(5, ge=1, le=100,default=5)
+    value: int = Field(ge=1, le=100,default=5)
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
 
