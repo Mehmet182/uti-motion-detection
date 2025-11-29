@@ -6,8 +6,8 @@ from sdks.novavision.src.base.model import Detection,Package, Inputs, Configs, O
 
 class InputDetections(Input):
     name: Literal["inputDetections"] = "inputDetections"
-    value: List[Detection]
-    type: str = "list"
+    value: List
+    type: Literal["list"] = "list"
 
     class Config:
         title = "Detections"
@@ -21,7 +21,7 @@ class Detection(Detection):
 
 class OutputDetections(Output):
     name: Literal["outputDetections"] = "outputDetections"
-    value: List[Detection]
+    value: list
     type: Literal["list"] = "list"
 
     class Config:
