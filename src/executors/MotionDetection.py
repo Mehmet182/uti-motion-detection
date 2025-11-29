@@ -20,105 +20,111 @@ class MotionDetection(Component):
 
         self.detections= self.request.get_param("inputDetections")
         print(f"Motion Detection Input Detections: {self.detections}")
-        self.motion_threshold = self.request.get_param("ConfigMotionThreshold")
+        self.motion_threshold = self.request.get_param("configMotionThreshold")
         print(f"Motion Detection Threshold: {self.motion_threshold}")
-        self.stationary_frames_limit = self.request.get_param("ConfigStationaryFrames")
+        self.stationary_frames_limit = self.request.get_param("configStationaryFrames")
         print(f"Motion Detection Stationary Frames Limit: {self.stationary_frames_limit}")
+
+        self.previous_centers = self.bootstrap.get("previous_centers", {})
+        print(f"Motion Detection Previous Centers: {self.previous_centers}")
+        self.stationary_counters = self.bootstrap.get("stationary_counters", {})
+        print(f"Motion Detection Stationary Counters: {self.stationary_counters}")
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
-        """Kareler arasında durumu korumak için başlangıç durumunu döndürür."""
+        """Başlangıç durumu."""
         return {
             "previous_centers": {},
             "stationary_counters": {}
         }
 
     def calculate_center(self, bbox: Dict[str, float]) -> tuple:
-        """Sınır kutusunun merkez koordinatlarını (x, y) hesaplar."""
+        """Merkez hesaplama."""
         center_x = bbox["left"] + bbox["width"] / 2
         center_y = bbox["top"] + bbox["height"] / 2
         return (center_x, center_y)
 
+    # BU FONKSIYON SINIFIN İÇİNDE OLMALI (GİRİNTİYE DİKKAT)
     def process_detections(self, detections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Algılamaları işler, hareket durumunu ekler ve bir sonraki kare için durumu günceller."""
-
+        """Algılamaları işler."""
         if not detections:
-            # Algılama yoksa durumu sıfırla
-            self.bootstrap["previous_centers"] = {}
-            self.bootstrap["stationary_counters"] = {}
+            self.previous_centers = {}
+            self.stationary_counters = {}
             return []
 
-        current_centers: Dict[Union[int, str], tuple] = {}
-        new_stationary_counters: Dict[Union[int, str], int] = {}
-        processed_detections: List[Dict[str, Any]] = []
+        next_centers = {}
+        next_counters = {}
+        processed_detections = []
 
         for detection in detections:
             bbox = detection.get("boundingBox")
             tracker_id = detection.get("trackerID")
 
+            if tracker_id is not None:
+                tracker_id = str(tracker_id)
+
             motion_status = "BİLİNMİYOR"
 
-            if bbox and tracker_id is not None:
+            if bbox and tracker_id:
                 current_center = self.calculate_center(bbox)
-                current_centers[tracker_id] = current_center
 
+                # Gelecek kare için kaydet
+                next_centers[tracker_id] = current_center
+
+                # Önceki verileri al
                 prev_center = self.previous_centers.get(tracker_id)
                 current_counter = self.stationary_counters.get(tracker_id, 0)
 
-                # Hareket tespiti sadece önceki karede de mevcutsa yapılır
-                if prev_center is not None:
-                    # Öklid mesafesi hesaplama
+                if prev_center:
+                    prev_x, prev_y = prev_center if isinstance(prev_center, (list, tuple)) else (0, 0)
+
                     distance = math.sqrt(
-                        (current_center[0] - prev_center[0]) ** 2 +
-                        (current_center[1] - prev_center[1]) ** 2
+                        (current_center[0] - prev_x) ** 2 +
+                        (current_center[1] - prev_y) ** 2
                     )
 
-                    if distance > self.motion_threshold:
-                        # HAREKET ETTİ: Eşik aşıldı
+                    if distance > float(self.motion_threshold):
                         motion_status = "HAREKET EDİYOR"
-                        new_stationary_counters[tracker_id] = 0  # Sayacı sıfırla
+                        next_counters[tracker_id] = 0
                     else:
-                        # HAREKET ETMEDİ (Eşiğin altında): Sabit kalma sayacını artır
                         current_counter += 1
-                        new_stationary_counters[tracker_id] = current_counter
+                        next_counters[tracker_id] = current_counter
 
-                        if current_counter >= self.stationary_frames_limit:
-                            # Sabit kalma limitine ulaşıldı
+                        if current_counter >= int(self.stationary_frames_limit):
                             motion_status = "DURUYOR"
                         else:
-                            # Limit aşılmadı, teknik olarak hareket etmiyor ama limit aşılmadığı için
-                            # genellikle akışın devam ettiğini belirtmek için "HAREKET EDİYOR" denir.
                             motion_status = "HAREKET EDİYOR"
-
                 else:
-                    # Yeni algılama: Başlangıçta hareket ediyor say (İlk karesi)
                     motion_status = "HAREKET EDİYOR"
-                    new_stationary_counters[tracker_id] = 0
+                    next_counters[tracker_id] = 0
 
-            # Algılama verisine hareket durumunu ekle
             detection["motionStatus"] = motion_status
             processed_detections.append(detection)
 
-        # Bootstrap verisini güncelle (bir sonraki kare için durumu kaydet)
-        self.bootstrap["previous_centers"] = current_centers
-        self.bootstrap["stationary_counters"] = new_stationary_counters
+        # Durumu güncelle
+        self.previous_centers = next_centers
+        self.stationary_counters = next_counters
 
         return processed_detections
 
     def run(self):
-        # 1. Algılamaları işle ve motionStatus alanını ekle
+        # 1. İşlem
+        # Hata burada alınıyordu, çünkü yukarıdaki fonksiyon bulunamıyordu.
+        print(f"Hafızadaki Takip Sayısı: {len(self.previous_centers)}")
         processed_detections = self.process_detections(self.detections)
 
-        # 2. KRİTİK ADIM: İşlenmiş veriyi context objesinin beklenen çıktı alanına atama
-        # build_response, context.motion_detections'tan çekecek.
+        # 2. Atama
         self.motion_detections = processed_detections
+        print(f"Processed Motion Detections: {self.motion_detections}")
 
-        # 3. Özel build_response fonksiyonunu kullanarak nihai paket modelini oluştur
+        # 3. Yanıt Oluşturma
         packageModel = build_response(context=self)
 
-        # 4. Güncellenmiş bootstrap verisini çıktı paketine ekle
-        # Bu, durumun bir sonraki frame'e aktarılmasını sağlar.
-        packageModel["bootstrap"] = self.bootstrap
+        # 4. Bootstrap (Serialization hatasını önleyen düzeltme)
+        packageModel.bootstrap = {
+            "previous_centers": self.previous_centers,
+            "stationary_counters": self.stationary_counters
+        }
 
         return packageModel
 
