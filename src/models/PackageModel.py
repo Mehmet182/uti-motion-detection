@@ -21,7 +21,7 @@ class Detection(Detection):
 
 class OutputDetections(Output):
     name: Literal["outputDetections"] = "outputDetections"
-    value: list
+    value: list[Detection]
     type: Literal["list"] = "list"
 
     class Config:
