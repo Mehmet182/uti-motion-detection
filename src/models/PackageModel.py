@@ -29,6 +29,10 @@ class OutputDetections(Output):
 
 
 class ConfigMotionThreshold(Config):
+    """
+    The minimum distance (in pixels) an object must move between frames to be considered "moving".
+    Movements below this value are considered "stationary" or noise.
+    """
     name: Literal["configMotionThreshold"] = "configMotionThreshold"
     value: int = Field(ge=0, le=100 , default=20)
     type: Literal["number"] = "number"
@@ -38,6 +42,9 @@ class ConfigMotionThreshold(Config):
         title = "Motion Threshold"
 
 class ConfigStationaryFrames(Config):
+    """
+    The number of consecutive frames an object must remain below the motion threshold before its status changes to "STOPPED".
+    """
     name: Literal["configStationaryFrames"] = "configStationaryFrames"
     value: int = Field(ge=1, le=100,default=5)
     type: Literal["number"] = "number"

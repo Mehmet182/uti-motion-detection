@@ -24,27 +24,18 @@ class MotionDetection(Component):
     def __init__(self, request, bootstrap):
         super().__init__(request, bootstrap)
 
-        # 1. Logger Başlat
         self.logger = LoggerManager()
-
-        # 2. Verileri Al
         self.request.model = PackageModel(**(self.request.data))
         self.detections = self.request.get_param("inputDetections")
 
         self.motion_threshold = float(self.request.get_param("ConfigMotionThreshold") or 20.0)
         self.stationary_frames_limit = int(self.request.get_param("ConfigStationaryFrames") or 5)
 
-        # 3. Hafızayı Yükle
         current_state = Memory.get_state()
         self.previous_centers = current_state.get("previous_centers", {})
         self.stationary_counters = current_state.get("stationary_counters", {})
 
-        # İstatistik Değişkenleri
-        self.stats = {
-            "moving": 0,
-            "stationary": 0,
-            "total_tracked": 0
-        }
+        self.stats = {"moving": 0, "stationary": 0, "calculating": 0, "total": 0}
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
@@ -53,11 +44,10 @@ class MotionDetection(Component):
     def calculate_center(self, bbox: Dict[str, float]) -> list:
         center_x = bbox["left"] + bbox["width"] / 2
         center_y = bbox["top"] + bbox["height"] / 2
-        return [round(center_x, 2), round(center_y, 2)]  # Okunabilirlik için yuvarladık
+        return [round(center_x, 2), round(center_y, 2)]
 
     def process_detections(self) -> List[Dict[str, Any]]:
 
-        # 1. Eğer kimse yoksa
         if not self.detections:
             if len(self.previous_centers) > 0:
                 self.logger.info("👀 Görüntüde kimse yok. Hafıza temizleniyor.")
@@ -70,12 +60,12 @@ class MotionDetection(Component):
         next_counters = {}
         processed_detections = []
 
-        # Sayaçları sıfırla
-        count_moving = 0
-        count_stationary = 0
+        # İstatistik sayaçları
+        c_mov = 0
+        c_stat = 0
+        c_calc = 0
 
-        self.logger.info(
-            f"--- 🏁 FRAME BAŞLIYOR (Eşik: {self.motion_threshold}px, Limit: {self.stationary_frames_limit} kare) ---")
+        self.logger.info(f"--- 🏁 FRAME BAŞLIYOR (Eşik: {self.motion_threshold}px) ---")
 
         for detection in self.detections:
             bbox = detection.get("boundingBox")
@@ -84,7 +74,7 @@ class MotionDetection(Component):
             if tracker_id is not None:
                 tracker_id = str(tracker_id)
 
-            motion_status = "BİLİNMİYOR"
+            motion_status = "HESAPLANIYOR"  # Varsayılan durumu nötr yapıyoruz
             debug_msg = ""
 
             if bbox and tracker_id:
@@ -103,46 +93,47 @@ class MotionDetection(Component):
                     distance = round(distance, 2)
 
                     if distance > self.motion_threshold:
-                        # Hareketli
+                        # --- DURUM 1: NET HAREKET ---
                         motion_status = "HAREKET EDİYOR"
                         next_counters[tracker_id] = 0
-                        count_moving += 1
-                        debug_msg = f"🏃 HAREKETLİ | Fark: {distance}px > {self.motion_threshold}"
+                        c_mov += 1
+                        debug_msg = f"🏃 HAREKETLİ | Fark: {distance}px"
                     else:
-                        # Duran (veya az hareketli)
+                        # --- DURUM 2: HAREKETSİZLİK VEYA AZ HAREKET ---
                         current_counter += 1
                         next_counters[tracker_id] = current_counter
 
                         if current_counter >= self.stationary_frames_limit:
+                            # Limit doldu, artık kesinlikle duruyor diyebiliriz
                             motion_status = "DURUYOR"
-                            count_stationary += 1
-                            debug_msg = f"🛑 DURUYOR   | Fark: {distance}px (Sayaç: {current_counter}/{self.stationary_frames_limit})"
+                            c_stat += 1
+                            debug_msg = f"🛑 DURUYOR   | Sayac: {current_counter}"
                         else:
-                            # Henüz limit dolmadı, geçici olarak hareketli sayılıyor
-                            motion_status = "HAREKET EDİYOR"
-                            count_moving += 1
-                            debug_msg = f"⏳ BEKLİYOR  | Fark: {distance}px (Sayaç: {current_counter}/{self.stationary_frames_limit})"
+                            # Limit dolmadı, hala analiz ediyoruz.
+                            # ESKİ KOD: buraya "HAREKET EDİYOR" diyordu (Hata buydu).
+                            # YENİ KOD: "HESAPLANIYOR" diyoruz.
+                            motion_status = "HESAPLANIYOR"
+                            c_calc += 1
+                            debug_msg = f"⏳ ANALİZ    | Sayac: {current_counter}/{self.stationary_frames_limit}"
 
-                    # DETAYLI LOG: Her nesne için koordinat değişimi
-                    self.logger.info(
-                        f"   🆔 ID:{tracker_id} | Eski:{prev_center} -> Yeni:{current_center} | {debug_msg}")
+                    self.logger.info(f"   🆔 ID:{tracker_id} | Fark: {distance}px | Durum: {motion_status}")
 
                 else:
-                    # Yeni Nesne
-                    motion_status = "HAREKET EDİYOR"
+                    # --- DURUM 3: YENİ GİRİŞ ---
+                    # ESKİ KOD: "HAREKET EDİYOR" diyordu.
+                    # YENİ KOD: "HESAPLANIYOR" diyoruz. İlk karede yargılamıyoruz.
+                    motion_status = "HESAPLANIYOR"
                     next_counters[tracker_id] = 0
-                    count_moving += 1
-                    self.logger.info(f"   🆕 ID:{tracker_id} | Yeni Giriş | Konum: {current_center}")
+                    c_calc += 1
+                    self.logger.info(f"   🆕 ID:{tracker_id} | Yeni Nesne | Durum: HESAPLANIYOR")
 
             detection["motionStatus"] = motion_status
             processed_detections.append(detection)
 
-        # İstatistikleri kaydet
-        self.stats["moving"] = count_moving
-        self.stats["stationary"] = count_stationary
-        self.stats["total_tracked"] = len(processed_detections)
+        # İstatistikler
+        self.stats = {"moving": c_mov, "stationary": c_stat, "calculating": c_calc, "total": len(processed_detections)}
 
-        # Değişkenleri güncelle
+        # Güncelleme
         self.previous_centers = next_centers
         self.stationary_counters = next_counters
 
@@ -151,21 +142,18 @@ class MotionDetection(Component):
     def run(self):
         processed_result = self.process_detections()
         self.motion_detections = processed_result
-        print(f"✅ self.motion_detections: ==== {self.motion_detections}")
         packageModel = build_response(context=self)
 
         Memory.update_state(self.previous_centers, self.stationary_counters)
         packageModel.bootstrap = {}
 
-        # ÖZET LOGU: Frame sonunda toplu bilgi
-        if self.stats["total_tracked"] > 0:
+        if self.stats["total"] > 0:
             self.logger.info(
-                f"📊 ÖZET: Toplam: {self.stats['total_tracked']} | "
+                f"📊 ÖZET: Toplam: {self.stats['total']} | "
                 f"🏃 Hareketli: {self.stats['moving']} | "
                 f"🛑 Duran: {self.stats['stationary']} | "
-                f"💾 Hafıza: {len(self.previous_centers)}"
+                f"⏳ Hesaplanan: {self.stats['calculating']}"
             )
-            self.logger.info("-" * 40)
 
         return packageModel
 
