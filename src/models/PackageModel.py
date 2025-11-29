@@ -73,8 +73,8 @@ class MotionDetectionResponse(Response):
     outputs: MotionDetectionOutputs
 
 
-class MotionDetectionExecutor(Config):
-    name: Literal["MotionDetectionExecutor"] = "MotionDetectionExecutor"
+class MotionDetection(Config):
+    name: Literal["MotionDetection"] = "MotionDetection"
     value: Union[MotionDetectionRequest, MotionDetectionResponse]
     type: Literal["object"] = "object"
     field: Literal["option"] = "option"
@@ -90,7 +90,7 @@ class MotionDetectionExecutor(Config):
 
 class ConfigExecutor(Config):
     name: Literal["ConfigExecutor"] = "ConfigExecutor"
-    value: Union[MotionDetectionExecutor]
+    value: Union[MotionDetection]
     type: Literal["executor"] = "executor"
     field: Literal["dependentDropdownlist"] = "dependentDropdownlist"
 
