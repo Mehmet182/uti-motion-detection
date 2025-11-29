@@ -47,7 +47,7 @@ class ConfigStationaryFrames(Config):
         title = "Stationary Frames"
 
 class MotionDetectionInputs(Inputs):
-    inputDetection: InputDetections
+    inputDetections: InputDetections
 
 
 class MotionDetectionConfigs(Configs):
