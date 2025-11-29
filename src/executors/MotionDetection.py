@@ -11,7 +11,7 @@ from components.MotionDetection.src.utils.response import build_response
 from components.MotionDetection.src.models.PackageModel import PackageModel
 
 
-class MotionDetector(Component):
+class MotionDetection(Component):
 
     def __init__(self, request, bootstrap):
         super().__init__(request, bootstrap)
