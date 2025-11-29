@@ -1,7 +1,7 @@
 
-from pydantic import Field, validator
+from pydantic import Field
 from typing import List, Optional, Union, Literal
-from sdks.novavision.src.base.model import Detection,Package, Image, Inputs, Configs, Outputs, Response, Request, Output, Input, Config
+from sdks.novavision.src.base.model import Detection,Package, Inputs, Configs, Outputs, Response, Request, Output, Input, Config
 
 
 class InputDetections(Input):
@@ -46,22 +46,22 @@ class ConfigStationaryFrames(Config):
     class Config:
         title = "Stationary Frames"
 
-class MotionInputs(Inputs):
+class MotionDetectionInputs(Inputs):
     inputDetection: InputDetections
 
 
-class MotionConfigs(Configs):
+class MotionDetectionConfigs(Configs):
     configMotionThreshold:ConfigMotionThreshold
     configStationaryFrames:ConfigStationaryFrames
 
 
-class MotionOutputs(Outputs):
+class MotionDetectionOutputs(Outputs):
     outputDetections: OutputDetections
 
 
-class MotionRequest(Request):
-    inputs: Optional[MotionInputs]
-    configs: MotionConfigs
+class MotionDetectionRequest(Request):
+    inputs: Optional[MotionDetectionInputs]
+    configs: MotionDetectionConfigs
 
     class Config:
         json_schema_extra = {
@@ -69,13 +69,13 @@ class MotionRequest(Request):
         }
 
 
-class MotionResponse(Response):
-    outputs: MotionOutputs
+class MotionDetectionResponse(Response):
+    outputs: MotionDetectionOutputs
 
 
-class MotionExecutor(Config):
-    name: Literal["MotionExecutor"] = "MotionExecutor"
-    value: Union[MotionRequest, MotionResponse]
+class MotionDetectionExecutor(Config):
+    name: Literal["MotionDetectionExecutor"] = "MotionDetectionExecutor"
+    value: Union[MotionDetectionRequest, MotionDetectionResponse]
     type: Literal["object"] = "object"
     field: Literal["option"] = "option"
 
@@ -90,7 +90,7 @@ class MotionExecutor(Config):
 
 class ConfigExecutor(Config):
     name: Literal["ConfigExecutor"] = "ConfigExecutor"
-    value: Union[MotionExecutor]
+    value: Union[MotionDetectionExecutor]
     type: Literal["executor"] = "executor"
     field: Literal["dependentDropdownlist"] = "dependentDropdownlist"
 
