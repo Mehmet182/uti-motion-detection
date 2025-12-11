@@ -27,40 +27,88 @@ class OutputDetections(Output):
     class Config:
         title = "Detections"
 
+# Not: Base 'Config' sınıfının projenizde zaten tanımlı olduğu varsayılmıştır.
 
-class ConfigMotionThreshold(Config):
+class ConfigHistoryFrameCount(Config):
     """
-    The minimum distance (in pixels) an object must move between frames to be considered "moving".
-    Movements below this value are considered "stationary" or noise.
+    Determines how many frames back the current frame is compared against.
+    Higher values (e.g., 15) detect slower movements but increase lag; lower values (e.g., 2) detect only fast movements.
     """
-    name: Literal["configMotionThreshold"] = "configMotionThreshold"
-    value: int = Field(ge=0, le=100 , default=20)
+    name: Literal["configHistoryFrameCount"] = "configHistoryFrameCount"
+    value: int = Field(ge=2, le=50, default=10)
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
 
     class Config:
-        title = "Motion Threshold"
+        title = "History Frame Count"
 
-class ConfigStationaryFrames(Config):
+
+class ConfigSizeChangeSensitivity(Config):
     """
-    The number of consecutive frames an object must remain below the motion threshold before its status changes to "STOPPED".
+    Sensitivity threshold (0.0 - 1.0) for detecting changes in the object's width or height (e.g., sitting down, standing up).
+    0.05 means a 5% change triggers detection.
     """
-    name: Literal["configStationaryFrames"] = "configStationaryFrames"
-    value: int = Field(ge=1, le=100,default=5)
+    name: Literal["configSizeChangeSensitivity"] = "configSizeChangeSensitivity"
+    value: float = Field(ge=0.01, le=1.0, default=0.05)
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
 
     class Config:
-        title = "Stationary Frames"
+        title = "Size Change Sensitivity"
+
+
+class ConfigInternalMotionSensitivity(Config):
+    """
+    Sensitivity threshold (0.0 - 1.0) for detecting pixel-level changes inside the object's bounding box (e.g., waving hands while standing still).
+    """
+    name: Literal["configInternalMotionSensitivity"] = "configInternalMotionSensitivity"
+    value: float = Field(ge=0.01, le=1.0, default=0.03)
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Internal Motion Sensitivity"
+
+
+class ConfigPosMoveThreshold(Config):
+    """
+    The minimum distance (in pixels) the object's center must move to be classified as "WALKING".
+    """
+    name: Literal["configPosMoveThreshold"] = "configPosMoveThreshold"
+    value: float = Field(ge=0.0, le=500.0, default=10.0)
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Position Move Threshold (px)"
+
+
+class ConfigResizedRoiSize(Config):
+    """
+    The resolution (N x N pixels) to which the object image is resized for internal analysis.
+    Lower values correspond to higher performance but less detail.
+    """
+    name: Literal["configResizedRoiSize"] = "configResizedRoiSize"
+    value: int = Field(ge=10, le=500, default=100)
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Resized ROI Size"
+
+
+
 
 class MotionDetectionInputs(Inputs):
     inputDetections: InputDetections
 
 
 class MotionDetectionConfigs(Configs):
-    configMotionThreshold:ConfigMotionThreshold
-    configStationaryFrames:ConfigStationaryFrames
-
+    configResizedRoiSize:ConfigResizedRoiSize
+    configPosMoveThreshold:ConfigPosMoveThreshold
+    configInternalMotionSensitivity:ConfigInternalMotionSensitivity
+    configSizeChangeSensitivity:ConfigSizeChangeSensitivity
+    configHistoryFrameCount:ConfigHistoryFrameCount
 
 class MotionDetectionOutputs(Outputs):
     outputDetections: OutputDetections

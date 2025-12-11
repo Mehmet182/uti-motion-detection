@@ -6,7 +6,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../'))
 
 from sdks.novavision.src.base.logger import LoggerManager
 
-
 class Memory:
     """
     Frame'ler arasında veri sürekliliğini sağlamak için kullanılan statik hafıza sınıfı.
@@ -14,12 +13,11 @@ class Memory:
     """
 
     # Program çalıştığı sürece hafızada kalacak veriler
+    # track_history: { tracker_id: [ {bbox:..., roi:...}, ... ] }
     _state = {
-        "previous_centers": {},  # {trackerID: [x, y]}
-        "stationary_counters": {}  # {trackerID: int}
+        "track_history": {}
     }
 
-    # Standart logging yerine sistemin LoggerManager'ını başlatıyoruz
     _logger = LoggerManager()
 
     @staticmethod
@@ -28,17 +26,17 @@ class Memory:
         return Memory._state
 
     @staticmethod
-    def update_state(previous_centers: dict, stationary_counters: dict):
-        """Hafızayı yeni verilerle günceller."""
-        Memory._state["previous_centers"] = previous_centers
-        Memory._state["stationary_counters"] = stationary_counters
+    def update_state(new_state_data: dict):
+        """
+        Hafızayı yeni verilerle günceller (Merge mantığı veya overwrite).
+        """
+        for key, value in new_state_data.items():
+            Memory._state[key] = value
 
     @staticmethod
     def reset_state():
-        """Hafızayı sıfırlar (Gerekirse kullanılır)."""
+        """Hafızayı sıfırlar."""
         Memory._state = {
-            "previous_centers": {},
-            "stationary_counters": {}
+            "track_history": {}
         }
-        # LoggerManager üzerinden info logu atıyoruz
-        Memory._logger.info("Motion Detection Memory Reset")
+        # Memory._logger.info("Motion Detection Memory Reset")
