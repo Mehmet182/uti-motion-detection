@@ -29,24 +29,38 @@ class OutputDetections(Output):
 
 # Not: Base 'Config' sınıfının projenizde zaten tanımlı olduğu varsayılmıştır.
 
-class ConfigHistoryFrameCount(Config):
+class ConfigStationaryFrames(Config):
     """
-    Determines how many frames back the current frame is compared against.
-    Higher values (e.g., 15) detect slower movements but increase lag; lower values (e.g., 2) detect only fast movements.
+    Bir nesnenin "DURUYOR" olarak işaretlenmesi için kaç kare boyunca hareketsiz kalması gerektiğini belirler.
+    Düşük değer: Hızlı karar verir (yanılma payı artar). Yüksek değer: Emin olmadan duruyor demez.
     """
-    name: Literal["configHistoryFrameCount"] = "configHistoryFrameCount"
-    value: int = Field(ge=2, le=50, default=10)
+    name: Literal["configStationaryFrames"] = "configStationaryFrames"
+    value: int = Field(ge=1, le=100, default=5)
     type: Literal["number"] = "number"
     field: Literal["textInput"] = "textInput"
 
     class Config:
-        title = "History Frame Count"
+        title = "Stationary Frames Limit"
+
+
+class ConfigPosMoveThreshold(Config):
+    """
+    Bir nesnenin hareket ediyor sayılması için bir önceki kareden kaç piksel uzağa gitmesi gerektiğini belirler.
+    Görüntü titremelerini hareket sanmamak için kullanılır.
+    """
+    name: Literal["configPosMoveThreshold"] = "configPosMoveThreshold"
+    value: float = Field(ge=0.0, le=500.0, default=10.0)
+    type: Literal["number"] = "number"
+    field: Literal["textInput"] = "textInput"
+
+    class Config:
+        title = "Movement Threshold (px)"
 
 
 class ConfigSizeChangeSensitivity(Config):
     """
-    Sensitivity threshold (0.0 - 1.0) for detecting changes in the object's width or height (e.g., sitting down, standing up).
-    0.05 means a 5% change triggers detection.
+    Nesnenin boyutundaki (genişlik/yükseklik) değişimi algılama hassasiyeti (0.0 - 1.0).
+    0.05 değeri %5'lik bir büyümeyi/küçülmeyi "ŞEKİL DEĞİŞİMİ" olarak algılar.
     """
     name: Literal["configSizeChangeSensitivity"] = "configSizeChangeSensitivity"
     value: float = Field(ge=0.01, le=1.0, default=0.05)
@@ -57,58 +71,16 @@ class ConfigSizeChangeSensitivity(Config):
         title = "Size Change Sensitivity"
 
 
-class ConfigInternalMotionSensitivity(Config):
-    """
-    Sensitivity threshold (0.0 - 1.0) for detecting pixel-level changes inside the object's bounding box (e.g., waving hands while standing still).
-    """
-    name: Literal["configInternalMotionSensitivity"] = "configInternalMotionSensitivity"
-    value: float = Field(ge=0.01, le=1.0, default=0.03)
-    type: Literal["number"] = "number"
-    field: Literal["textInput"] = "textInput"
-
-    class Config:
-        title = "Internal Motion Sensitivity"
-
-
-class ConfigPosMoveThreshold(Config):
-    """
-    The minimum distance (in pixels) the object's center must move to be classified as "WALKING".
-    """
-    name: Literal["configPosMoveThreshold"] = "configPosMoveThreshold"
-    value: float = Field(ge=0.0, le=500.0, default=10.0)
-    type: Literal["number"] = "number"
-    field: Literal["textInput"] = "textInput"
-
-    class Config:
-        title = "Position Move Threshold (px)"
-
-
-class ConfigResizedRoiSize(Config):
-    """
-    The resolution (N x N pixels) to which the object image is resized for internal analysis.
-    Lower values correspond to higher performance but less detail.
-    """
-    name: Literal["configResizedRoiSize"] = "configResizedRoiSize"
-    value: int = Field(ge=10, le=500, default=100)
-    type: Literal["number"] = "number"
-    field: Literal["textInput"] = "textInput"
-
-    class Config:
-        title = "Resized ROI Size"
-
-
-
 
 class MotionDetectionInputs(Inputs):
     inputDetections: InputDetections
 
 
 class MotionDetectionConfigs(Configs):
-    configResizedRoiSize:ConfigResizedRoiSize
     configPosMoveThreshold:ConfigPosMoveThreshold
-    configInternalMotionSensitivity:ConfigInternalMotionSensitivity
     configSizeChangeSensitivity:ConfigSizeChangeSensitivity
-    configHistoryFrameCount:ConfigHistoryFrameCount
+    configStationaryFrames:ConfigStationaryFrames
+
 
 class MotionDetectionOutputs(Outputs):
     outputDetections: OutputDetections

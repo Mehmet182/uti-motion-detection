@@ -1,8 +1,6 @@
 import sys
 import os
 import math
-import cv2
-import numpy as np
 from typing import List, Dict, Any
 
 # SDK Yolları
@@ -27,206 +25,146 @@ class MotionDetection(Component):
         self.detections = self.request.get_param("inputDetections")
 
         # --- CONFIG PARAMETRELERİ ---
-        # Eğer config gelmezse varsayılan değerleri kullanır
-        self.history_frame_count = self.request.get_param("ConfigHistoryFrameCount")
-        self.size_sensitivity =self.request.get_param("ConfigSizeChangeSensitivity")
-        self.internal_sensitivity = self.request.get_param("ConfigInternalMotionSensitivity")
-        self.pos_move_threshold = self.request.get_param("ConfigPosMoveThreshold")
-        self.roi_resize_dim = self.request.get_param("ConfigResizedRoiSize")
+        # Hareket Eşiği (Piksel): Nesne kaç piksel kayarsa hareketli sayılsın?
+        self.motion_threshold = float(self.request.get_param("ConfigPosMoveThreshold") or 10.0)
+
+        # Sabit Kalma Limiti (Frame): Kaç kare boyunca hareket etmezse "DURUYOR" densin?
+        self.stationary_frames_limit = int(self.request.get_param("ConfigStationaryFrames") or 5)
+
+        # Boyut Değişim Hassasiyeti (%): % kaç büyüme/küçülme dikkate alınsın?
+        self.size_sensitivity = float(self.request.get_param("ConfigSizeChangeSensitivity") or 0.05)
 
         # Hafızayı Çek
-        current_state = Memory.get_state()
-        # track_history yapısı: { "tracker_id": [ {"roi": np.array, "bbox": [cx, cy, w, h]}, ... ] }
-        self.track_history = current_state.get("track_history", {})
+        # Veri yapısı: { "tracker_id": { "center": [x, y], "dims": [w, h], "counter": int } }
+        self.history_state = Memory.get_state().get("history_state", {})
 
-        self.stats = {"walking": 0, "shape_change": 0, "internal_motion": 0, "stationary": 0, "analyzing": 0}
+        self.stats = {"moving": 0, "stationary": 0, "calculating": 0, "shape_change": 0, "total": 0}
 
     @staticmethod
     def bootstrap(config: dict) -> dict:
         return {}
 
-    def get_frame_image(self):
-        """
-        Request içindeki görüntüyü OpenCV formatına (numpy array) çevirir.
-        SDK yapınıza göre burayı düzenlemeniz gerekebilir.
-        """
-        try:
-            # ÖRNEK SENARYO: Görüntü self.request.image içerisinde numpy array olarak geliyorsa:
-            if hasattr(self.request, 'image') and self.request.image is not None:
-                return self.request.image
-
-            # ÖRNEK SENARYO 2: self.request.frame varsa
-            if hasattr(self.request, 'frame') and self.request.frame is not None:
-                return self.request.frame
-
-            # Eğer görüntü yoksa None döner (Sadece koordinat analizi yapılır)
-            return None
-        except Exception as e:
-            self.logger.error(f"Görüntü alınırken hata: {e}")
-            return None
-
-    def preprocess_roi(self, frame, bbox):
-        """ROI'yi kesip, gri yapıp, standart boyuta getirir."""
-        if frame is None:
-            return None
-
-        x, y, w, h = int(bbox["left"]), int(bbox["top"]), int(bbox["width"]), int(bbox["height"])
-
-        # Sınır kontrolleri
-        img_h, img_w = frame.shape[:2]
-        x1, y1 = max(0, x), max(0, y)
-        x2, y2 = min(img_w, x + w), min(img_h, y + h)
-
-        if x2 <= x1 or y2 <= y1:
-            return None
-
-        roi = frame[y1:y2, x1:x2]
-
-        try:
-            roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            # Gürültü azaltma
-            roi_gray = cv2.GaussianBlur(roi_gray, (21, 21), 0)
-            roi_resized = cv2.resize(roi_gray, (self.roi_resize_dim, self.roi_resize_dim))
-            return roi_resized
-        except Exception as e:
-            # ROI çok küçükse hata verebilir
-            return None
+    def calculate_center(self, bbox: Dict[str, float]) -> list:
+        center_x = bbox["left"] + bbox["width"] / 2
+        center_y = bbox["top"] + bbox["height"] / 2
+        return [round(center_x, 2), round(center_y, 2)]
 
     def process_detections(self) -> List[Dict[str, Any]]:
         if not self.detections:
-            if len(self.track_history) > 0:
+            # Kimse yoksa hafızayı temizle (Opsiyonel, ID çakışmasını önler)
+            if len(self.history_state) > 0:
                 self.logger.info("👀 Görüntüde kimse yok. Hafıza temizleniyor.")
                 Memory.reset_state()
             return []
 
-        frame = self.get_frame_image()
-        if frame is None:
-            self.logger.warning(
-                "⚠️ Frame görüntüsü alınamadı! Sadece koordinat analizi yapılabilir (Pixel analizi devre dışı).")
-
-        current_ids = []
+        next_state = {}
         processed_detections = []
 
-        # İstatistikler
-        c_walk = 0
-        c_shape = 0
-        c_internal = 0
+        # İstatistik sayaçları
+        c_mov = 0
         c_stat = 0
-        c_analysing = 0
+        c_calc = 0
+        c_shape = 0
+
+        # self.logger.info(f"--- 🏁 ANALİZ BAŞLIYOR (Eşik: {self.motion_threshold}px) ---")
 
         for detection in self.detections:
             bbox = detection.get("boundingBox")
             tracker_id = str(detection.get("trackerID")) if detection.get("trackerID") is not None else None
 
-            if not tracker_id or not bbox:
-                processed_detections.append(detection)
-                continue
+            # Varsayılan değerler
+            motion_status = "HESAPLANIYOR"
+            detail_msg = "Veri Toplanıyor"
 
-            current_ids.append(tracker_id)
+            if bbox and tracker_id:
+                # Şu anki veriler
+                current_center = self.calculate_center(bbox)
+                current_w = bbox["width"]
+                current_h = bbox["height"]
 
-            # --- VERİ HAZIRLIĞI ---
-            cx = bbox["left"] + bbox["width"] / 2
-            cy = bbox["top"] + bbox["height"] / 2
-            w = bbox["width"]
-            h = bbox["height"]
+                # Geçmiş verisi var mı?
+                prev_data = self.history_state.get(tracker_id)
 
-            # ROI İşleme (Frame varsa)
-            current_roi = self.preprocess_roi(frame, bbox)
+                if prev_data:
+                    prev_center = prev_data["center"]
+                    prev_w = prev_data["dims"][0]
+                    prev_h = prev_data["dims"][1]
+                    stationary_counter = prev_data["counter"]
 
-            current_data = {
-                "bbox": [cx, cy, w, h],
-                "roi": current_roi  # Frame yoksa None olur
-            }
+                    # 1. Mesafe Hesabı (Yürüme)
+                    distance = math.sqrt(
+                        (current_center[0] - prev_center[0]) ** 2 +
+                        (current_center[1] - prev_center[1]) ** 2
+                    )
 
-            # Geçmişi Yükle veya Oluştur
-            if tracker_id not in self.track_history:
-                self.track_history[tracker_id] = []
+                    # 2. Boyut Değişimi Hesabı (Eğilme/Kalkma)
+                    diff_w = abs(current_w - prev_w) / prev_w if prev_w > 0 else 0
+                    diff_h = abs(current_h - prev_h) / prev_h if prev_h > 0 else 0
+                    is_size_changed = (diff_w > self.size_sensitivity) or (diff_h > self.size_sensitivity)
 
-            history_list = self.track_history[tracker_id]
-            history_list.append(current_data)
+                    # --- KARAR MANTIĞI ---
 
-            # Geçmiş listesi boyutunu koru
-            if len(history_list) > self.history_frame_count:
-                history_list.pop(0)  # En eskiyi sil
+                    if distance > self.motion_threshold:
+                        # HAREKET: Konum değişti
+                        motion_status = "HAREKETLİ"
+                        detail_msg = f"Hız: {int(distance)}px"
+                        stationary_counter = 0  # Hareket ettiği an sayacı sıfırla
+                        c_mov += 1
 
-            # --- ANALİZ MANTIĞI ---
-            motion_status = "ANALİZ EDİLİYOR"
-            detail_msg = f"Veri Toplanıyor ({len(history_list)}/{self.history_frame_count})"
-            motion_type = "analyzing"
+                    elif is_size_changed:
+                        # ŞEKİL DEĞİŞİMİ: Konum sabit ama boyut değişti
+                        motion_status = "ŞEKİL DEĞİŞTİRİYOR"
+                        detail_msg = f"Değişim: %{int(max(diff_w, diff_h) * 100)}"
+                        stationary_counter = 0  # Şekil değiştirirken de hareketli sayılır
+                        c_shape += 1
 
-            # Yeterli geçmiş varsa kıyasla
-            if len(history_list) == self.history_frame_count:
-                old_data = history_list[0]
-                old_bbox = old_data["bbox"]
-                old_roi = old_data["roi"]
+                    else:
+                        # DURMA EĞİLİMİ: Hareket yok, boyut değişimi yok
+                        stationary_counter += 1
 
-                old_cx, old_cy, old_w, old_h = old_bbox
+                        if stationary_counter >= self.stationary_frames_limit:
+                            motion_status = "DURUYOR"
+                            detail_msg = f"Süre: {stationary_counter} kare"
+                            c_stat += 1
+                        else:
+                            motion_status = "HESAPLANIYOR"
+                            detail_msg = f"Analiz: {stationary_counter}/{self.stationary_frames_limit}"
+                            c_calc += 1
 
-                # 1. Mesafe Farkı (Yürüme)
-                dist = math.sqrt((cx - old_cx) ** 2 + (cy - old_cy) ** 2)
-
-                # 2. Boyut Farkı (Şekil Değiştirme)
-                diff_w = abs(w - old_w) / old_w if old_w > 0 else 0
-                diff_h = abs(h - old_h) / old_h if old_h > 0 else 0
-
-                # 3. İç Piksel Farkı (İç Hareket) - Sadece ROI varsa
-                pixel_change_ratio = 0.0
-                if current_roi is not None and old_roi is not None:
-                    try:
-                        pixel_diff = cv2.absdiff(current_roi, old_roi)
-                        _, pixel_thresh = cv2.threshold(pixel_diff, 20, 255, cv2.THRESH_BINARY)
-                        pixel_change_ratio = np.count_nonzero(pixel_thresh) / pixel_thresh.size
-                    except:
-                        pixel_change_ratio = 0.0
-
-                # --- KARAR AĞACI ---
-                if dist > self.pos_move_threshold:
-                    motion_status = "YÜRÜYOR / İERLİYOR"
-                    detail_msg = f"Mesafe: {int(dist)}px"
-                    motion_type = "walking"
-                    c_walk += 1
-
-                elif diff_w > self.size_sensitivity or diff_h > self.size_sensitivity:
-                    motion_status = "ŞEKİL DEĞİŞTİRİYOR"
-                    detail_msg = f"Boyut: %{int(max(diff_w, diff_h) * 100)}"
-                    motion_type = "shape_change"
-                    c_shape += 1
-
-                elif pixel_change_ratio > self.internal_sensitivity:
-                    motion_status = "DURDUĞU YERDE HAREKETLİ"
-                    detail_msg = f"Yoğunluk: %{int(pixel_change_ratio * 100)}"
-                    motion_type = "internal_motion"
-                    c_internal += 1
+                    # Bir sonraki kare için veriyi hazırla
+                    next_state[tracker_id] = {
+                        "center": current_center,
+                        "dims": [current_w, current_h],
+                        "counter": stationary_counter
+                    }
 
                 else:
-                    motion_status = "SABİT / DURUYOR"
-                    detail_msg = "Hareket Algılanmadı"
-                    motion_type = "stationary"
-                    c_stat += 1
-            else:
-                c_analysing += 1
+                    # YENİ NESNE (İlk defa görüldü)
+                    motion_status = "HESAPLANIYOR"
+                    detail_msg = "Yeni Giriş"
+                    c_calc += 1
 
-            # Loglama
-            # self.logger.info(f"ID:{tracker_id} | {motion_status} | {detail_msg}")
+                    next_state[tracker_id] = {
+                        "center": current_center,
+                        "dims": [current_w, current_h],
+                        "counter": 0
+                    }
 
-            # Sonuçları detection objesine ekle
             detection["motionStatus"] = motion_status
             detection["motionDetail"] = detail_msg
-            detection["motionType"] = motion_type
             processed_detections.append(detection)
 
-        # Temizlik: Ekranda olmayan ID'leri hafızadan sil
-        keys_to_remove = [k for k in self.track_history if k not in current_ids]
-        for k in keys_to_remove:
-            del self.track_history[k]
-
+        # İstatistikler
         self.stats = {
-            "walking": c_walk,
-            "shape_change": c_shape,
-            "internal_motion": c_internal,
+            "moving": c_mov,
             "stationary": c_stat,
-            "analyzing": c_analysing
+            "calculating": c_calc,
+            "shape_change": c_shape,
+            "total": len(processed_detections)
         }
+
+        # Güncel state'i kaydet (Sadece ekranda olanları tutar, çıkanlar silinir)
+        self.history_state = next_state
 
         return processed_detections
 
@@ -236,11 +174,16 @@ class MotionDetection(Component):
         packageModel = build_response(context=self)
 
         # Memory güncelle
-        Memory.update_state({"track_history": self.track_history})
+        Memory.update_state({"history_state": self.history_state})
         packageModel.bootstrap = {}
 
-        self.logger.info(
-            f"📊 ÖZET: 🚶 {self.stats['walking']} | 📐 {self.stats['shape_change']} | 👋 {self.stats['internal_motion']} | 🛑 {self.stats['stationary']}")
+        if self.stats["total"] > 0:
+            self.logger.info(
+                f"📊 ÖZET: 🏃 {self.stats['moving']} | "
+                f"🛑 {self.stats['stationary']} | "
+                f"📐 {self.stats['shape_change']} | "
+                f"⏳ {self.stats['calculating']}"
+            )
 
         return packageModel
 
