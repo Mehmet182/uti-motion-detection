@@ -23,10 +23,21 @@ class MotionDetection(Component):
         self.logger = LoggerManager()
         self.request.model = PackageModel(**(self.request.data))
         self.detections = self.request.get_param("inputDetections")
-        self.motion_threshold =self.request.get_param("ConfigPosMoveThreshold")
-        self.stationary_frames_limit = self.request.get_param("ConfigStationaryFrames")
-        self.size_sensitivity = self.request.get_param("ConfigSizeChangeSensitivity")
+
+        # --- CONFIG PARAMETRELERİ ---
+        # Hareket Eşiği (Piksel): Nesne kaç piksel kayarsa hareketli sayılsın?
+        self.motion_threshold = float(self.request.get_param("ConfigPosMoveThreshold") or 10.0)
+
+        # Sabit Kalma Limiti (Frame): Kaç kare boyunca hareket etmezse "DURUYOR" densin?
+        self.stationary_frames_limit = int(self.request.get_param("ConfigStationaryFrames") or 5)
+
+        # Boyut Değişim Hassasiyeti (%): % kaç büyüme/küçülme dikkate alınsın?
+        self.size_sensitivity = float(self.request.get_param("ConfigSizeChangeSensitivity") or 0.05)
+
+        # Hafızayı Çek
+        # Veri yapısı: { "tracker_id": { "center": [x, y], "dims": [w, h], "counter": int } }
         self.history_state = Memory.get_state().get("history_state", {})
+
         self.stats = {"moving": 0, "stationary": 0, "calculating": 0, "shape_change": 0, "total": 0}
 
     @staticmethod
@@ -165,6 +176,14 @@ class MotionDetection(Component):
         # Memory güncelle
         Memory.update_state({"history_state": self.history_state})
         packageModel.bootstrap = {}
+
+        if self.stats["total"] > 0:
+            self.logger.info(
+                f"📊 ÖZET: 🏃 {self.stats['moving']} | "
+                f"🛑 {self.stats['stationary']} | "
+                f"📐 {self.stats['shape_change']} | "
+                f"⏳ {self.stats['calculating']}"
+            )
 
         return packageModel
 
