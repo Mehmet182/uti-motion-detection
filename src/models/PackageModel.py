@@ -31,8 +31,7 @@ class OutputDetections(Output):
 
 class ConfigStationaryFrames(Config):
     """
-    Bir nesnenin "DURUYOR" olarak işaretlenmesi için kaç kare boyunca hareketsiz kalması gerektiğini belirler.
-    Düşük değer: Hızlı karar verir (yanılma payı artar). Yüksek değer: Emin olmadan duruyor demez.
+    Frames required to mark an object as "STATIONARY". Low: Faster detection. High: Higher accuracy/stability.
     """
     name: Literal["configStationaryFrames"] = "configStationaryFrames"
     value: int = Field(ge=1, le=100, default=5)
@@ -45,8 +44,7 @@ class ConfigStationaryFrames(Config):
 
 class ConfigPosMoveThreshold(Config):
     """
-    Bir nesnenin hareket ediyor sayılması için bir önceki kareden kaç piksel uzağa gitmesi gerektiğini belirler.
-    Görüntü titremelerini hareket sanmamak için kullanılır.
+    Min pixel distance to consider an object moving. Helps prevent camera jitter from being detected as motion.
     """
     name: Literal["configPosMoveThreshold"] = "configPosMoveThreshold"
     value: float = Field(ge=0.0, le=500.0, default=10.0)
@@ -59,8 +57,7 @@ class ConfigPosMoveThreshold(Config):
 
 class ConfigSizeChangeSensitivity(Config):
     """
-    Nesnenin boyutundaki (genişlik/yükseklik) değişimi algılama hassasiyeti (0.0 - 1.0).
-    0.05 değeri %5'lik bir büyümeyi/küçülmeyi "ŞEKİL DEĞİŞİMİ" olarak algılar.
+    Sensitivity for size changes (0.0-1.0). E.g., 0.05 detects a 5% change in dimensions.
     """
     name: Literal["configSizeChangeSensitivity"] = "configSizeChangeSensitivity"
     value: float = Field(ge=0.01, le=1.0, default=0.05)
